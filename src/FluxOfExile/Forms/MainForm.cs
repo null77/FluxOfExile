@@ -58,6 +58,7 @@ public class MainForm : Form
         _pauseMenuItem = new ToolStripMenuItem("Pause Tracking", null, (s, e) => TogglePause());
 
         var settingsItem = new ToolStripMenuItem("Settings...", null, (s, e) => ShowSettings());
+        var historyItem = new ToolStripMenuItem("Play History...", null, (s, e) => ShowHistory());
         var debugItem = new ToolStripMenuItem("Debug Panel...", null, (s, e) => ShowDebugPanel());
         var exitItem = new ToolStripMenuItem("Exit", null, (s, e) => ExitApplication());
 
@@ -66,6 +67,7 @@ public class MainForm : Form
         _trayMenu.Items.Add(_pauseMenuItem);
         _trayMenu.Items.Add(new ToolStripSeparator());
         _trayMenu.Items.Add(settingsItem);
+        _trayMenu.Items.Add(historyItem);
         _trayMenu.Items.Add(debugItem);
         _trayMenu.Items.Add(new ToolStripSeparator());
         _trayMenu.Items.Add(exitItem);
@@ -202,6 +204,12 @@ public class MainForm : Form
     private void ShowSettings()
     {
         using var form = new SettingsForm(_settingsService);
+        form.ShowDialog();
+    }
+
+    private void ShowHistory()
+    {
+        using var form = new HistoryForm(_settingsService);
         form.ShowDialog();
     }
 

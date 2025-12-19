@@ -115,10 +115,36 @@ public class TimeTracker
         {
             var sessionMinutes = (DateTime.Now - State.CurrentSessionStart.Value).TotalMinutes;
             // Apply time multiplier for debug/testing
-            State.TodayAccumulatedMinutes += sessionMinutes * TimeMultiplier;
+            var adjustedMinutes = sessionMinutes * TimeMultiplier;
+            State.TodayAccumulatedMinutes += adjustedMinutes;
             State.CurrentSessionStart = DateTime.Now; // Reset for next interval
             _settingsService.SaveState();
+
+            // Record to history
+            RecordToHistory(adjustedMinutes);
         }
+    }
+
+    private void RecordToHistory(double minutes)
+    {
+        var history = _settingsService.History;
+        var currentHour = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, DateTime.Now.Hour, 0, 0);
+
+        var record = history.HourlyRecords.FirstOrDefault(r => r.Hour == currentHour);
+        if (record == null)
+        {
+            record = new Models.HourlyPlayRecord { Hour = currentHour, MinutesPlayed = 0 };
+            history.HourlyRecords.Add(record);
+        }
+
+        record.MinutesPlayed += minutes;
+        history.TotalMinutesAllTime += minutes;
+
+        // Prune old records (keep last 8 days for weekly view)
+        var cutoff = DateTime.Now.AddDays(-8);
+        history.HourlyRecords.RemoveAll(r => r.Hour < cutoff);
+
+        _settingsService.SaveHistory();
     }
 
     private void CheckNotifications()

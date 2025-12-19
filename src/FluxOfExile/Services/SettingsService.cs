@@ -11,6 +11,7 @@ public class SettingsService
 
     private static readonly string SettingsFile = Path.Combine(AppDataFolder, "settings.json");
     private static readonly string StateFile = Path.Combine(AppDataFolder, "state.json");
+    private static readonly string HistoryFile = Path.Combine(AppDataFolder, "history.json");
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -19,6 +20,7 @@ public class SettingsService
 
     public Settings Settings { get; private set; } = new();
     public SessionState State { get; private set; } = new();
+    public PlayHistory History { get; private set; } = new();
 
     public SettingsService()
     {
@@ -38,6 +40,7 @@ public class SettingsService
     {
         Settings = LoadFile<Settings>(SettingsFile) ?? new Settings();
         State = LoadFile<SessionState>(StateFile) ?? new SessionState();
+        History = LoadFile<PlayHistory>(HistoryFile) ?? new PlayHistory();
     }
 
     public void SaveSettings()
@@ -48,6 +51,17 @@ public class SettingsService
     public void SaveState()
     {
         SaveFile(StateFile, State);
+    }
+
+    public void SaveHistory()
+    {
+        SaveFile(HistoryFile, History);
+    }
+
+    public void ResetHistory()
+    {
+        History = new PlayHistory();
+        SaveHistory();
     }
 
     private T? LoadFile<T>(string path) where T : class
