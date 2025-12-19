@@ -51,6 +51,7 @@ coverage/
 
 # Publish output
 publish/
+*.zip
 
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
