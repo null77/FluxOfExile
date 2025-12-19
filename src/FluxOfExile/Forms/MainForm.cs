@@ -13,6 +13,7 @@ public class MainForm : Form
     private ContextMenuStrip _trayMenu = null!;
     private System.Windows.Forms.Timer _updateTimer = null!;
     private DebugForm? _debugForm;
+    private bool _isDialogOpen = false;
     private ToolStripMenuItem _pauseMenuItem = null!;
     private ToolStripMenuItem _statusMenuItem = null!;
 
@@ -59,7 +60,6 @@ public class MainForm : Form
 
         var settingsItem = new ToolStripMenuItem("Settings...", null, (s, e) => ShowSettings());
         var historyItem = new ToolStripMenuItem("Play History...", null, (s, e) => ShowHistory());
-        var debugItem = new ToolStripMenuItem("Debug Panel...", null, (s, e) => ShowDebugPanel());
         var exitItem = new ToolStripMenuItem("Exit", null, (s, e) => ExitApplication());
 
         _trayMenu.Items.Add(_statusMenuItem);
@@ -68,7 +68,13 @@ public class MainForm : Form
         _trayMenu.Items.Add(new ToolStripSeparator());
         _trayMenu.Items.Add(settingsItem);
         _trayMenu.Items.Add(historyItem);
-        _trayMenu.Items.Add(debugItem);
+
+        if (Program.DebugMode)
+        {
+            var debugItem = new ToolStripMenuItem("Debug Panel...", null, (s, e) => ShowDebugPanel());
+            _trayMenu.Items.Add(debugItem);
+        }
+
         _trayMenu.Items.Add(new ToolStripSeparator());
         _trayMenu.Items.Add(exitItem);
 
@@ -80,7 +86,10 @@ public class MainForm : Form
             Visible = true
         };
 
-        _trayIcon.DoubleClick += (s, e) => ShowDebugPanel();
+        if (Program.DebugMode)
+        {
+            _trayIcon.DoubleClick += (s, e) => ShowDebugPanel();
+        }
     }
 
     private Icon CreateDefaultIcon()
@@ -203,14 +212,32 @@ public class MainForm : Form
 
     private void ShowSettings()
     {
-        using var form = new SettingsForm(_settingsService);
-        form.ShowDialog();
+        if (_isDialogOpen) return;
+        _isDialogOpen = true;
+        try
+        {
+            using var form = new SettingsForm(_settingsService);
+            form.ShowDialog();
+        }
+        finally
+        {
+            _isDialogOpen = false;
+        }
     }
 
     private void ShowHistory()
     {
-        using var form = new HistoryForm(_settingsService);
-        form.ShowDialog();
+        if (_isDialogOpen) return;
+        _isDialogOpen = true;
+        try
+        {
+            using var form = new HistoryForm(_settingsService);
+            form.ShowDialog();
+        }
+        finally
+        {
+            _isDialogOpen = false;
+        }
     }
 
     private void ShowDebugPanel()
