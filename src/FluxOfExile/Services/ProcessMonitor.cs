@@ -110,22 +110,18 @@ public class ProcessMonitor
 
     private bool IsPoEWindow(string title, string processName)
     {
-        var titleLower = title.ToLowerInvariant();
         var processLower = processName.ToLowerInvariant();
 
-        return titleLower.Contains("path of exile") ||
-               processLower.Contains("pathofexile") ||
-               processLower.Contains("pathofexile_x64") ||
-               processLower.Contains("pathofexilesteam") ||
-               processLower.Contains("pathofexile2");
+        // Only match actual PoE game processes, not browsers showing PoE websites
+        return processLower == "pathofexile" ||
+               processLower == "pathofexile_x64" ||
+               processLower == "pathofexilesteam" ||
+               processLower == "pathofexile2";
     }
 
     private bool IsPoE2Window(string title, string processName)
     {
-        var titleLower = title.ToLowerInvariant();
         var processLower = processName.ToLowerInvariant();
-
-        return titleLower.Contains("path of exile 2") ||
-               processLower.Contains("pathofexile2");
+        return processLower == "pathofexile2";
     }
 }

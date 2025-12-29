@@ -35,8 +35,8 @@ public class HistoryForm : Form
             Size = new Size(480, 350)
         };
 
-        // Last Week (hourly) tab
-        var hourlyTab = new TabPage("Last 7 Days (Hourly)");
+        // Last 7 Days (daily) tab
+        var dailyTab = new TabPage("Last 7 Days");
         _hourlyList = new ListView
         {
             Dock = DockStyle.Fill,
@@ -44,11 +44,9 @@ public class HistoryForm : Form
             FullRowSelect = true,
             GridLines = true
         };
-        _hourlyList.Columns.Add("Date", 100);
-        _hourlyList.Columns.Add("Hour", 80);
-        _hourlyList.Columns.Add("Minutes", 80);
-        _hourlyList.Columns.Add("Daily Total", 100);
-        hourlyTab.Controls.Add(_hourlyList);
+        _hourlyList.Columns.Add("Day", 150);
+        _hourlyList.Columns.Add("Time Played", 120);
+        dailyTab.Controls.Add(_hourlyList);
 
         // Weekly summary tab
         var weeklyTab = new TabPage("Weekly Summary");
@@ -64,7 +62,7 @@ public class HistoryForm : Form
         _weeklyList.Columns.Add("Days Active", 100);
         weeklyTab.Controls.Add(_weeklyList);
 
-        _tabControl.TabPages.Add(hourlyTab);
+        _tabControl.TabPages.Add(dailyTab);
         _tabControl.TabPages.Add(weeklyTab);
         Controls.Add(_tabControl);
 
@@ -99,73 +97,83 @@ public class HistoryForm : Form
     private void LoadData()
     {
         var history = _settingsService.History;
-
-        // Load hourly data for last 7 days
-        _hourlyList.Items.Clear();
+        var resetTime = _settingsService.Settings.ResetTime;
         var now = DateTime.Now;
-        var weekAgo = now.AddDays(-7);
 
-        var recentRecords = history.HourlyRecords
-            .Where(r => r.Hour >= weekAgo)
-            .OrderByDescending(r => r.Hour)
-            .ToList();
+        // Load daily data for last 7 days (based on reset time)
+        _hourlyList.Items.Clear();
 
-        // Group by date for daily totals
-        var dailyTotals = recentRecords
-            .GroupBy(r => r.Hour.Date)
-            .ToDictionary(g => g.Key, g => g.Sum(r => r.MinutesPlayed));
-
-        foreach (var record in recentRecords)
+        for (int i = 0; i < 7; i++)
         {
-            if (record.MinutesPlayed < 0.1) continue; // Skip negligible entries
+            // Calculate the "day" based on reset time
+            // A "day" runs from reset time to reset time the next day
+            var dayDate = now.Date.AddDays(-i);
+            var dayStart = dayDate.Add(resetTime.ToTimeSpan());
+            var dayEnd = dayStart.AddDays(1);
 
-            var item = new ListViewItem(record.Hour.ToString("ddd MMM dd"));
-            item.SubItems.Add(record.Hour.ToString("HH:00"));
-            item.SubItems.Add($"{record.MinutesPlayed:F1}");
+            // If we're before today's reset time, shift back a day
+            if (i == 0 && now < dayStart)
+            {
+                dayStart = dayStart.AddDays(-1);
+                dayEnd = dayEnd.AddDays(-1);
+                dayDate = dayDate.AddDays(-1);
+            }
 
-            var dailyTotal = dailyTotals.GetValueOrDefault(record.Hour.Date, 0);
-            item.SubItems.Add(FormatTime(dailyTotal));
+            var dayRecords = history.HourlyRecords
+                .Where(r => r.Hour >= dayStart && r.Hour < dayEnd)
+                .ToList();
+
+            var totalMinutes = dayRecords.Sum(r => r.MinutesPlayed);
+
+            var item = new ListViewItem(dayDate.ToString("ddd MMM dd"));
+            item.SubItems.Add(FormatTime(totalMinutes));
 
             _hourlyList.Items.Add(item);
         }
 
-        // Load weekly summary (last 4 weeks from history)
+        // Load weekly summary (last 5 weeks from history, based on reset time)
         _weeklyList.Items.Clear();
 
-        // Calculate weeks from all available data
-        var allRecords = history.HourlyRecords.OrderBy(r => r.Hour).ToList();
-        if (allRecords.Any())
+        // Get start of current week (Sunday at reset time)
+        var currentWeekStart = now.Date.AddDays(-(int)now.DayOfWeek).Add(resetTime.ToTimeSpan());
+        if (now < currentWeekStart)
+            currentWeekStart = currentWeekStart.AddDays(-7);
+
+        for (int i = 0; i < 5; i++)
         {
-            var firstDate = allRecords.First().Hour.Date;
-            var lastDate = now.Date;
+            var weekStart = currentWeekStart.AddDays(-7 * i);
+            var weekEnd = weekStart.AddDays(7);
 
-            // Get start of each week (Sunday)
-            var currentWeekStart = lastDate.AddDays(-(int)lastDate.DayOfWeek);
+            var weekRecords = history.HourlyRecords
+                .Where(r => r.Hour >= weekStart && r.Hour < weekEnd)
+                .ToList();
 
-            for (int i = 0; i < 5; i++) // Show up to 5 weeks
-            {
-                var weekStart = currentWeekStart.AddDays(-7 * i);
-                var weekEnd = weekStart.AddDays(7);
+            if (!weekRecords.Any()) continue;
 
-                var weekRecords = history.HourlyRecords
-                    .Where(r => r.Hour >= weekStart && r.Hour < weekEnd)
-                    .ToList();
+            var totalMinutes = weekRecords.Sum(r => r.MinutesPlayed);
+            var daysActive = weekRecords
+                .Select(r => GetDayForRecord(r.Hour, resetTime))
+                .Distinct()
+                .Count();
 
-                if (!weekRecords.Any()) continue;
+            var item = new ListViewItem(weekStart.ToString("MMM dd, yyyy"));
+            item.SubItems.Add(FormatTime(totalMinutes));
+            item.SubItems.Add(daysActive.ToString());
 
-                var totalMinutes = weekRecords.Sum(r => r.MinutesPlayed);
-                var daysActive = weekRecords.Select(r => r.Hour.Date).Distinct().Count();
-
-                var item = new ListViewItem(weekStart.ToString("MMM dd, yyyy"));
-                item.SubItems.Add(FormatTime(totalMinutes));
-                item.SubItems.Add(daysActive.ToString());
-
-                _weeklyList.Items.Add(item);
-            }
+            _weeklyList.Items.Add(item);
         }
 
         // Update total
         _totalLabel.Text = $"Total All Time: {FormatTime(history.TotalMinutesAllTime)}";
+    }
+
+    private static DateTime GetDayForRecord(DateTime recordTime, TimeOnly resetTime)
+    {
+        // Determine which "day" a record belongs to based on reset time
+        var resetDateTime = recordTime.Date.Add(resetTime.ToTimeSpan());
+        if (recordTime < resetDateTime)
+            return recordTime.Date.AddDays(-1);
+        return recordTime.Date;
     }
 
     private static string FormatTime(double minutes)

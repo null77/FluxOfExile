@@ -50,7 +50,7 @@ Right-click the tray icon to access:
 
 ![Play History](doc/history_form.png)
 
-- **Last 7 Days (Hourly)** - Shows each hour you played with daily totals
+- **Last 7 Days** - Shows daily playtime totals (days based on reset time)
 - **Weekly Summary** - Hours played per week and days active
 - **Total All Time** - Cumulative playtime since tracking began
 - **Reset All History** - Clear all historical data
