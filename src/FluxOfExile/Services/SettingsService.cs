@@ -22,10 +22,15 @@ public class SettingsService
     public SessionState State { get; private set; } = new();
     public PlayHistory History { get; private set; } = new();
 
+    private int _previousDailyTimeLimit;
+
+    public event Action<int, int>? DailyTimeLimitChanged; // (oldLimit, newLimit)
+
     public SettingsService()
     {
         EnsureAppDataFolder();
         Load();
+        _previousDailyTimeLimit = Settings.DailyTimeLimitMinutes;
     }
 
     private void EnsureAppDataFolder()
@@ -45,7 +50,16 @@ public class SettingsService
 
     public void SaveSettings()
     {
+        var oldLimit = _previousDailyTimeLimit;
+        var newLimit = Settings.DailyTimeLimitMinutes;
+
         SaveFile(SettingsFile, Settings);
+
+        if (oldLimit != newLimit)
+        {
+            _previousDailyTimeLimit = newLimit;
+            DailyTimeLimitChanged?.Invoke(oldLimit, newLimit);
+        }
     }
 
     public void SaveState()

@@ -167,26 +167,44 @@ public class MainForm : Form
         var mins = (int)total % 60;
 
         string status;
+        string trayText;
+
         if (_settingsService.State.IsPaused)
         {
             status = $"Paused - {hours}h {mins}m / {limit / 60}h {limit % 60}m";
+            trayText = "FluxOfExile (Paused)";
+        }
+        else if (_settingsService.State.IsIdlePaused)
+        {
+            status = $"Idle - {hours}h {mins}m / {limit / 60}h {limit % 60}m";
+            trayText = "FluxOfExile (Idle)";
         }
         else if (remaining < 0)
         {
             status = $"OVERTIME - {hours}h {mins}m ({Math.Abs(remaining):F0}m over)";
+            trayText = $"FluxOfExile\n{status}";
         }
         else
         {
             status = $"{hours}h {mins}m / {limit / 60}h {limit % 60}m ({remaining:F0}m left)";
+            trayText = $"FluxOfExile\n{status}";
         }
 
         _statusMenuItem.Text = status;
-        _trayIcon.Text = $"FluxOfExile\n{status}";
+        _trayIcon.Text = trayText;
     }
 
     private void OnStateChanged()
     {
         UpdateTrayStatus();
+
+        // Immediately update dim level when state changes
+        // (covers limit changes, manual pause/resume, idle state changes)
+        if (_currentPoEWindow != IntPtr.Zero &&
+            (_debugForm == null || !_debugForm.IsDimOverridden))
+        {
+            _overlay.DimLevel = _timeTracker.GetCurrentDimLevel();
+        }
     }
 
     private void OnNotificationTriggered(string message, NotificationType type)

@@ -23,6 +23,11 @@ public class SessionState
     public bool IsPaused { get; set; } = false;
 
     /// <summary>
+    /// Whether the session is auto-paused due to idle (10s no input)
+    /// </summary>
+    public bool IsIdlePaused { get; set; } = false;
+
+    /// <summary>
     /// Last time an overtime alert was shown
     /// </summary>
     public DateTime? LastOvertimeAlert { get; set; }

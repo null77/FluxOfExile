@@ -15,6 +15,7 @@ public class TimeTracker
 {
     private readonly SettingsService _settingsService;
     private readonly ProcessMonitor _processMonitor;
+    private readonly InputMonitor _inputMonitor;
 
     public event Action? StateChanged;
     public event Action<string, NotificationType>? NotificationTriggered;
@@ -31,6 +32,10 @@ public class TimeTracker
     {
         _settingsService = settingsService;
         _processMonitor = processMonitor;
+        _inputMonitor = new InputMonitor();
+
+        // Subscribe to settings changes
+        _settingsService.DailyTimeLimitChanged += OnDailyTimeLimitChanged;
     }
 
     /// <summary>
@@ -42,6 +47,7 @@ public class TimeTracker
 
         if (State.IsPaused)
         {
+            State.IsIdlePaused = false; // Clear idle state when manually paused
             EndSession();
             return;
         }
@@ -50,19 +56,47 @@ public class TimeTracker
 
         if (focusedPoE != null)
         {
-            // PoE is focused - track time
-            if (State.CurrentSessionStart == null)
+            // PoE is focused - check for idle
+            var idleSeconds = _inputMonitor.GetIdleSeconds();
+
+            if (idleSeconds >= 10.0)
             {
-                StartSession();
+                // User is idle - auto-pause
+                if (!State.IsIdlePaused)
+                {
+                    State.IsIdlePaused = true;
+                    EndSession(); // Save accumulated time
+                    _settingsService.SaveState();
+                    StateChanged?.Invoke(); // Notify UI
+                }
+                return; // Don't track time while idle
             }
             else
             {
-                UpdateAccumulatedTime();
+                // User is active
+                if (State.IsIdlePaused)
+                {
+                    // Resume from idle
+                    State.IsIdlePaused = false;
+                    _settingsService.SaveState();
+                    StateChanged?.Invoke(); // Update tray tooltip
+                }
+
+                // Normal tracking flow
+                if (State.CurrentSessionStart == null)
+                {
+                    StartSession();
+                }
+                else
+                {
+                    UpdateAccumulatedTime();
+                }
             }
         }
         else
         {
-            // PoE not focused - end session
+            // PoE not focused
+            State.IsIdlePaused = false;
             EndSession();
         }
 
@@ -283,6 +317,44 @@ public class TimeTracker
             var dimRange = Settings.DimEndPercent - Models.Settings.DimStartPercent;
             return Models.Settings.DimStartPercent + (int)(progress * dimRange);
         }
+    }
+
+    private void OnDailyTimeLimitChanged(int oldLimit, int newLimit)
+    {
+        // Re-evaluate notification thresholds when limit changes
+        var totalMinutes = GetTotalMinutesToday();
+        var remaining = newLimit - totalMinutes;
+
+        // If the new limit puts user into overtime/limit reached
+        if (remaining <= 0 && !State.ShownLimitReached)
+        {
+            NotificationTriggered?.Invoke(
+                "You've reached your daily time limit!",
+                NotificationType.LimitReached);
+            State.ShownLimitReached = true;
+            _settingsService.SaveState();
+        }
+        // If new limit puts user into 15-min warning zone
+        else if (remaining <= 15 && remaining > 0 && !State.Shown15MinWarning)
+        {
+            NotificationTriggered?.Invoke(
+                "15 minutes remaining in your daily limit!",
+                NotificationType.Warning15Min);
+            State.Shown15MinWarning = true;
+            _settingsService.SaveState();
+        }
+        // If new limit puts user into 30-min warning zone
+        else if (remaining <= 30 && remaining > 15 && !State.Shown30MinWarning)
+        {
+            NotificationTriggered?.Invoke(
+                "30 minutes remaining in your daily limit!",
+                NotificationType.Warning30Min);
+            State.Shown30MinWarning = true;
+            _settingsService.SaveState();
+        }
+
+        // Trigger StateChanged to update dim level immediately
+        StateChanged?.Invoke();
     }
 
     public void TogglePause()
