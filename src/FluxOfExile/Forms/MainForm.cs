@@ -249,7 +249,7 @@ public class MainForm : Form
         _isDialogOpen = true;
         try
         {
-            using var form = new HistoryForm(_settingsService);
+            using var form = new HistoryForm(_settingsService, _timeTracker);
             form.ShowDialog();
         }
         finally

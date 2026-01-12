@@ -6,16 +6,20 @@ namespace FluxOfExile.Forms;
 public class HistoryForm : Form
 {
     private readonly SettingsService _settingsService;
+    private readonly TimeTracker _timeTracker;
 
     private TabControl _tabControl = null!;
     private ListView _hourlyList = null!;
     private ListView _weeklyList = null!;
     private Label _totalLabel = null!;
     private Button _resetButton = null!;
+    private Button _editButton = null!;
+    private Button _deleteButton = null!;
 
-    public HistoryForm(SettingsService settingsService)
+    public HistoryForm(SettingsService settingsService, TimeTracker timeTracker)
     {
         _settingsService = settingsService;
+        _timeTracker = timeTracker;
         InitializeControls();
         LoadData();
     }
@@ -75,14 +79,47 @@ public class HistoryForm : Form
         };
         Controls.Add(_totalLabel);
 
+        // Edit and Delete buttons
+        _deleteButton = new Button
+        {
+            Text = "Delete Selected",
+            Location = new Point(140, 365),
+            Size = new Size(100, 30),
+            Enabled = false
+        };
+        _deleteButton.Click += DeleteButton_Click;
+        Controls.Add(_deleteButton);
+
+        _editButton = new Button
+        {
+            Text = "Edit Selected",
+            Location = new Point(250, 365),
+            Size = new Size(100, 30),
+            Enabled = false
+        };
+        _editButton.Click += EditButton_Click;
+        Controls.Add(_editButton);
+
         _resetButton = new Button
         {
             Text = "Reset All History",
-            Location = new Point(370, 365),
-            Size = new Size(120, 30)
+            Location = new Point(360, 365),
+            Size = new Size(130, 30)
         };
         _resetButton.Click += ResetButton_Click;
         Controls.Add(_resetButton);
+
+        // Context menu for daily list
+        var contextMenu = new ContextMenuStrip();
+        contextMenu.Items.Add("Edit", null, EditMenuItem_Click);
+        contextMenu.Items.Add("Delete", null, DeleteMenuItem_Click);
+        _hourlyList.ContextMenuStrip = contextMenu;
+
+        // Event handlers
+        _hourlyList.DoubleClick += HourlyList_DoubleClick;
+        _hourlyList.SelectedIndexChanged += ListView_SelectedIndexChanged;
+        _hourlyList.KeyDown += HourlyList_KeyDown;
+        _tabControl.SelectedIndexChanged += TabControl_SelectedIndexChanged;
 
         var trackingSinceLabel = new Label
         {
@@ -127,6 +164,7 @@ public class HistoryForm : Form
 
             var item = new ListViewItem(dayDate.ToString("ddd MMM dd"));
             item.SubItems.Add(FormatTime(totalMinutes));
+            item.Tag = new { DayStart = dayStart, DayEnd = dayEnd, DayDate = dayDate };
 
             _hourlyList.Items.Add(item);
         }
@@ -200,5 +238,189 @@ public class HistoryForm : Form
             LoadData();
             MessageBox.Show("History has been reset.", "Reset Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
+    }
+
+    private void ListView_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        var hasSelection = _hourlyList.SelectedItems.Count > 0;
+        var isDailyTab = _tabControl.SelectedIndex == 0;
+        _editButton.Enabled = hasSelection && isDailyTab;
+        _deleteButton.Enabled = hasSelection && isDailyTab;
+    }
+
+    private void TabControl_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        // Update button state when switching tabs
+        var hasSelection = _hourlyList.SelectedItems.Count > 0;
+        var isDailyTab = _tabControl.SelectedIndex == 0;
+        _editButton.Enabled = hasSelection && isDailyTab;
+        _deleteButton.Enabled = hasSelection && isDailyTab;
+    }
+
+    private void HourlyList_DoubleClick(object? sender, EventArgs e)
+    {
+        if (_hourlyList.SelectedItems.Count > 0)
+            EditSelectedDay();
+    }
+
+    private void EditButton_Click(object? sender, EventArgs e)
+    {
+        EditSelectedDay();
+    }
+
+    private void EditMenuItem_Click(object? sender, EventArgs e)
+    {
+        EditSelectedDay();
+    }
+
+    private void DeleteButton_Click(object? sender, EventArgs e)
+    {
+        DeleteSelectedDay();
+    }
+
+    private void DeleteMenuItem_Click(object? sender, EventArgs e)
+    {
+        DeleteSelectedDay();
+    }
+
+    private void HourlyList_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Enter && _hourlyList.SelectedItems.Count > 0)
+        {
+            EditSelectedDay();
+            e.Handled = true;
+        }
+        else if (e.KeyCode == Keys.Delete && _hourlyList.SelectedItems.Count > 0)
+        {
+            DeleteSelectedDay();
+            e.Handled = true;
+        }
+    }
+
+    private void EditSelectedDay()
+    {
+        if (_hourlyList.SelectedItems.Count == 0) return;
+
+        // Reload history to ensure we have latest data
+        _settingsService.Load();
+
+        // Get day boundaries from stored metadata
+        var selectedItem = _hourlyList.SelectedItems[0];
+        dynamic metadata = selectedItem.Tag!;
+        DateTime dayStart = metadata.DayStart;
+        DateTime dayEnd = metadata.DayEnd;
+        DateTime dayDate = metadata.DayDate;
+
+        // Get current minutes for this day
+        var dayRecords = _settingsService.History.HourlyRecords
+            .Where(r => r.Hour >= dayStart && r.Hour < dayEnd)
+            .ToList();
+        var currentMinutes = dayRecords.Sum(r => r.MinutesPlayed);
+
+        // Check if editing active day
+        if (IsActiveDay(dayDate))
+        {
+            var warning = MessageBox.Show(
+                "You're currently tracking playtime. Pause tracking before editing today?\n\nRecommended: Yes",
+                "Active Tracking Detected",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Warning);
+
+            if (warning == DialogResult.Yes)
+            {
+                // Pause tracking
+                _timeTracker.TogglePause();
+            }
+            else if (warning == DialogResult.Cancel)
+            {
+                return; // Cancel edit
+            }
+            // DialogResult.No continues with edit anyway
+        }
+
+        // Open edit dialog
+        using var dialog = new EditDayDialog(dayStart, dayEnd, dayDate, currentMinutes);
+        if (dialog.ShowDialog() == DialogResult.OK)
+        {
+            if (dialog.DeleteRequested)
+            {
+                DeleteDayRecords(dayStart, dayEnd);
+            }
+            else
+            {
+                UpdateDayRecords(dayStart, dayEnd, dialog.NewMinutes);
+            }
+
+            RecalculateTotalAllTime();
+            _settingsService.SaveHistory();
+            LoadData(); // Refresh display
+        }
+    }
+
+    private void DeleteSelectedDay()
+    {
+        if (_hourlyList.SelectedItems.Count == 0) return;
+
+        // Get day boundaries from stored metadata
+        var selectedItem = _hourlyList.SelectedItems[0];
+        dynamic metadata = selectedItem.Tag!;
+        DateTime dayStart = metadata.DayStart;
+        DateTime dayEnd = metadata.DayEnd;
+        DateTime dayDate = metadata.DayDate;
+
+        var result = MessageBox.Show(
+            $"Delete all playtime for {dayDate:ddd MMM dd}?\n\nThis cannot be undone.",
+            "Delete Day",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        if (result == DialogResult.Yes)
+        {
+            DeleteDayRecords(dayStart, dayEnd);
+            RecalculateTotalAllTime();
+            _settingsService.SaveHistory();
+            LoadData();
+        }
+    }
+
+    private void UpdateDayRecords(DateTime dayStart, DateTime dayEnd, double newTotalMinutes)
+    {
+        // Remove all existing records for this day
+        _settingsService.History.HourlyRecords.RemoveAll(r => r.Hour >= dayStart && r.Hour < dayEnd);
+
+        // Add single record at start of day if > 0
+        if (newTotalMinutes > 0)
+        {
+            _settingsService.History.HourlyRecords.Add(new HourlyPlayRecord
+            {
+                Hour = dayStart,
+                MinutesPlayed = newTotalMinutes
+            });
+        }
+    }
+
+    private void DeleteDayRecords(DateTime dayStart, DateTime dayEnd)
+    {
+        _settingsService.History.HourlyRecords.RemoveAll(r => r.Hour >= dayStart && r.Hour < dayEnd);
+    }
+
+    private void RecalculateTotalAllTime()
+    {
+        _settingsService.History.TotalMinutesAllTime =
+            _settingsService.History.HourlyRecords.Sum(r => r.MinutesPlayed);
+    }
+
+    private bool IsActiveDay(DateTime dayDate)
+    {
+        var now = DateTime.Now;
+        var resetTime = _settingsService.Settings.ResetTime;
+
+        // Calculate effective date based on reset time
+        var effectiveDate = now.TimeOfDay < resetTime.ToTimeSpan()
+            ? DateOnly.FromDateTime(now.AddDays(-1))
+            : DateOnly.FromDateTime(now);
+
+        var recordDay = DateOnly.FromDateTime(dayDate);
+        return recordDay >= effectiveDate;
     }
 }
