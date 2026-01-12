@@ -196,31 +196,40 @@ public class TimeTracker
         var remaining = Settings.DailyTimeLimitMinutes - totalMinutes;
         var now = DateTime.Now;
 
-        // Launch notification - show on every game start
+        // Launch notification - show on game start after 10 minutes of inactivity
         if (!State.ShownLaunchNotificationThisSession)
         {
-            var hours = (int)totalMinutes / 60;
-            var mins = (int)totalMinutes % 60;
-            var remHours = (int)Math.Max(0, remaining) / 60;
-            var remMins = (int)Math.Max(0, remaining) % 60;
+            // Only show if it's been 10+ minutes since last launch notification (or never shown)
+            var minutesSinceLastNotification = State.LastLaunchNotificationTime.HasValue
+                ? (now - State.LastLaunchNotificationTime.Value).TotalMinutes
+                : double.MaxValue;
 
-            string message;
-            if (remaining > 0)
+            if (minutesSinceLastNotification >= 10)
             {
-                if (remHours > 0)
-                    message = $"Played {hours}h {mins}m today. {remHours}h {remMins}m remaining.";
+                var hours = (int)totalMinutes / 60;
+                var mins = (int)totalMinutes % 60;
+                var remHours = (int)Math.Max(0, remaining) / 60;
+                var remMins = (int)Math.Max(0, remaining) % 60;
+
+                string message;
+                if (remaining > 0)
+                {
+                    if (remHours > 0)
+                        message = $"Played {hours}h {mins}m today. {remHours}h {remMins}m remaining.";
+                    else
+                        message = $"Played {hours}h {mins}m today. {remMins}m remaining.";
+                }
                 else
-                    message = $"Played {hours}h {mins}m today. {remMins}m remaining.";
-            }
-            else
-            {
-                var overtimeMinutes = (int)Math.Abs(remaining);
-                message = $"Played {hours}h {mins}m today. {overtimeMinutes}m over limit!";
-            }
+                {
+                    var overtimeMinutes = (int)Math.Abs(remaining);
+                    message = $"Played {hours}h {mins}m today. {overtimeMinutes}m over limit!";
+                }
 
-            NotificationTriggered?.Invoke(message, NotificationType.Hourly);
-            State.ShownLaunchNotificationThisSession = true;
-            _settingsService.SaveState();
+                NotificationTriggered?.Invoke(message, NotificationType.Hourly);
+                State.ShownLaunchNotificationThisSession = true;
+                State.LastLaunchNotificationTime = now;
+                _settingsService.SaveState();
+            }
         }
 
         // 1. Hourly status notification (only when > 30 min remaining)

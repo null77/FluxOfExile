@@ -56,4 +56,9 @@ public class SessionState
     /// Whether the launch notification has been shown for the current session
     /// </summary>
     public bool ShownLaunchNotificationThisSession { get; set; } = false;
+
+    /// <summary>
+    /// Last time a launch notification was shown (for 10-minute cooldown)
+    /// </summary>
+    public DateTime? LastLaunchNotificationTime { get; set; }
 }
