@@ -51,4 +51,9 @@ public class SessionState
     /// Whether the limit reached notification has been shown today
     /// </summary>
     public bool ShownLimitReached { get; set; } = false;
+
+    /// <summary>
+    /// Whether the launch notification has been shown for the current session
+    /// </summary>
+    public bool ShownLaunchNotificationThisSession { get; set; } = false;
 }

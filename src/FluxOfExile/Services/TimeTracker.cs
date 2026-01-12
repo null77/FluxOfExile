@@ -130,6 +130,7 @@ public class TimeTracker
     private void StartSession()
     {
         State.CurrentSessionStart = DateTime.Now;
+        State.ShownLaunchNotificationThisSession = false;
         _settingsService.SaveState();
     }
 
@@ -139,6 +140,7 @@ public class TimeTracker
         {
             UpdateAccumulatedTime();
             State.CurrentSessionStart = null;
+            State.ShownLaunchNotificationThisSession = false;
             _settingsService.SaveState();
         }
     }
@@ -193,6 +195,33 @@ public class TimeTracker
         var totalMinutes = GetTotalMinutesToday();
         var remaining = Settings.DailyTimeLimitMinutes - totalMinutes;
         var now = DateTime.Now;
+
+        // Launch notification - show on every game start
+        if (!State.ShownLaunchNotificationThisSession)
+        {
+            var hours = (int)totalMinutes / 60;
+            var mins = (int)totalMinutes % 60;
+            var remHours = (int)Math.Max(0, remaining) / 60;
+            var remMins = (int)Math.Max(0, remaining) % 60;
+
+            string message;
+            if (remaining > 0)
+            {
+                if (remHours > 0)
+                    message = $"Played {hours}h {mins}m today. {remHours}h {remMins}m remaining.";
+                else
+                    message = $"Played {hours}h {mins}m today. {remMins}m remaining.";
+            }
+            else
+            {
+                var overtimeMinutes = (int)Math.Abs(remaining);
+                message = $"Played {hours}h {mins}m today. {overtimeMinutes}m over limit!";
+            }
+
+            NotificationTriggered?.Invoke(message, NotificationType.Hourly);
+            State.ShownLaunchNotificationThisSession = true;
+            _settingsService.SaveState();
+        }
 
         // 1. Hourly status notification (only when > 30 min remaining)
         // Triggers at start (0 min) and every 60 minutes of accumulated play time
