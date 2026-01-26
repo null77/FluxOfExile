@@ -80,31 +80,86 @@ public class SettingsService
 
     private T? LoadFile<T>(string path) where T : class
     {
+        var backupPath = path + ".bak";
+
+        // Try to load main file
         try
         {
             if (File.Exists(path))
             {
                 var json = File.ReadAllText(path);
-                return JsonSerializer.Deserialize<T>(json, JsonOptions);
+                var result = JsonSerializer.Deserialize<T>(json, JsonOptions);
+                if (result != null)
+                    return result;
             }
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Error loading {path}: {ex.Message}");
         }
+
+        // Main file failed or doesn't exist, try backup
+        try
+        {
+            if (File.Exists(backupPath))
+            {
+                System.Diagnostics.Debug.WriteLine($"Main file corrupted, attempting recovery from {backupPath}");
+                var json = File.ReadAllText(backupPath);
+                var result = JsonSerializer.Deserialize<T>(json, JsonOptions);
+                if (result != null)
+                {
+                    // Restore from backup
+                    File.Copy(backupPath, path, overwrite: true);
+                    return result;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error loading backup {backupPath}: {ex.Message}");
+        }
+
         return null;
     }
 
     private void SaveFile<T>(string path, T data)
     {
+        var tempPath = path + ".tmp";
+        var backupPath = path + ".bak";
+
         try
         {
+            // Serialize data
             var json = JsonSerializer.Serialize(data, JsonOptions);
-            File.WriteAllText(path, json);
+
+            // Write to temporary file with forced disk flush
+            using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write,
+                FileShare.None, 4096, FileOptions.WriteThrough))
+            using (var writer = new StreamWriter(fileStream))
+            {
+                writer.Write(json);
+                writer.Flush();
+                fileStream.Flush(flushToDisk: true);
+            }
+
+            // Create backup of existing file before overwriting
+            if (File.Exists(path))
+            {
+                File.Copy(path, backupPath, overwrite: true);
+            }
+
+            // Atomic rename: replace main file with temp file
+            File.Move(tempPath, path, overwrite: true);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Error saving {path}: {ex.Message}");
+
+            // Clean up temp file if it exists
+            if (File.Exists(tempPath))
+            {
+                try { File.Delete(tempPath); } catch { }
+            }
         }
     }
 }
