@@ -36,6 +36,15 @@ public class TimeTracker
 
         // Subscribe to settings changes
         _settingsService.DailyTimeLimitChanged += OnDailyTimeLimitChanged;
+
+        // Clear any dangling session from crash/unexpected shutdown
+        // If app is starting up, there cannot be an active session
+        if (State.CurrentSessionStart != null)
+        {
+            State.CurrentSessionStart = null;
+            State.ShownLaunchNotificationThisSession = false;
+            _settingsService.SaveState();
+        }
     }
 
     /// <summary>
