@@ -53,6 +53,9 @@ coverage/
 publish/
 *.zip
 
+# Release artifacts
+releases/
+
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
 
