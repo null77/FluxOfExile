@@ -7,7 +7,11 @@
       "Bash(dotnet run:*)",
       "Bash(cat:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(ls:*)",
+      "Bash(dotnet publish:*)",
+      "Bash(git tag:*)",
+      "Bash(git show:*)"
     ],
     "deny": [],
     "ask": []
